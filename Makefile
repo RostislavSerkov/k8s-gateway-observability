@@ -9,35 +9,35 @@ help: ## Список команд
 
 .PHONY: deploy
 deploy: ## Полное развертывание с нуля: хост + kubeadm + Calico + все компоненты (нужен sudo)
-	sudo ./scripts/deploy.sh
+	sudo bash scripts/deploy.sh
 
 .PHONY: verify
 verify: ## Smoke-тесты: Gateway API, Prometheus, Fluentd -> OpenSearch
-	./scripts/verify.sh
+	bash scripts/verify.sh
 
 .PHONY: info
 info: ## Адреса UI, пароли и команды для ручной проверки
-	./scripts/info.sh
+	bash scripts/info.sh
 
 .PHONY: host
 host: ## Только подготовка хоста (containerd, kubeadm, helm)
-	sudo ./scripts/00-host-prepare.sh
+	sudo bash scripts/00-host-prepare.sh
 
 .PHONY: cluster
 cluster: host ## Только kubeadm-кластер + Calico
-	sudo ./scripts/01-cluster.sh
+	sudo bash scripts/01-cluster.sh
 
 .PHONY: platform
 platform: ## Только Envoy Gateway + kube-prometheus-stack (в существующий кластер)
-	./scripts/02-platform.sh
+	bash scripts/02-platform.sh
 
 .PHONY: apps
 apps: ## Только ресурсы решения через Kustomize (приложение, Gateway API, логи, мониторинг)
-	./scripts/03-apps.sh
+	bash scripts/03-apps.sh
 
 .PHONY: deploy-k8s
 deploy-k8s: platform apps ## Развернуть в уже существующий кластер (KUBECONFIG), без kubeadm
-	./scripts/info.sh
+	bash scripts/info.sh
 
 .PHONY: status
 status: ## Состояние подов, Gateway и маршрутов
@@ -54,4 +54,4 @@ lint: ## Статические проверки (shellcheck, yamllint, kustomiz
 
 .PHONY: destroy
 destroy: ## Удалить кластер (kubeadm reset)
-	sudo ./scripts/destroy.sh
+	sudo bash scripts/destroy.sh

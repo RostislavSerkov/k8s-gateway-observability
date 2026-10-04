@@ -1,0 +1,9 @@
+*.log
+*.pyc
+.idea/
+.vscode/
+kubeconfig*
+*.key
+*.crt
+docs/passport/*.png
+.DS_Store

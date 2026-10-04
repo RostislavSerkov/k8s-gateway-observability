@@ -1,0 +1,3 @@
+# SC2015: в verify.sh "A && pass || fail" используется намеренно (pass всегда возвращает 0)
+# SC1091: source через $(dirname "$0") shellcheck не разрешает статически
+disable=SC2015,SC1091

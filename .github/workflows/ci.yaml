@@ -1,0 +1,118 @@
+# CI/CD: статические проверки + полный e2e-прогон на чистой Ubuntu 24.04 (GitHub-hosted runner):
+# kubeadm-кластер -> развертывание -> smoke-тесты -> ПОВТОРНОЕ развертывание (идемпотентность) -> smoke-тесты.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Static checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: shellcheck -e SC2015,SC1091 scripts/*.sh
+
+      - name: yamllint
+        run: |
+          pipx install yamllint >/dev/null
+          printf '%s\n' 'extends: default' 'ignore: [deploy/kubeadm/]' 'rules:' '  line-length: {max: 220}' \
+            '  document-start: disable' '  comments-indentation: disable' '  comments: {min-spaces-from-content: 1}' \
+            '  truthy: {check-keys: false}' '  indentation: {indent-sequences: whatever}' > /tmp/yamllint.yaml
+          yamllint -s -c /tmp/yamllint.yaml .
+
+      - name: kustomize build
+        run: kubectl kustomize deploy/manifests > /tmp/rendered.yaml && wc -l /tmp/rendered.yaml
+
+      - name: kubeconform (схемы Kubernetes + CRD Gateway API, Envoy Gateway, Prometheus Operator)
+        continue-on-error: true  # каталог CRD-схем сторонний и может отставать от версий CRD
+        run: |
+          curl -fsSL -o /tmp/kubeconform.tgz https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
+          sudo tar xzf /tmp/kubeconform.tgz -C /usr/local/bin kubeconform
+          source versions.env
+          kubeconform -strict -summary -output text \
+            -kubernetes-version "${KUBERNETES_VERSION}" \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -ignore-missing-schemas \
+            /tmp/rendered.yaml
+
+  e2e-kubeadm:
+    name: E2E on Ubuntu 24.04 (kubeadm)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner info
+        run: |
+          cat /etc/os-release | head -4
+          nproc; free -h; df -h /
+
+      - name: Stop Docker (на раннере предустановлен, кластеру не нужен)
+        run: sudo systemctl stop docker.socket docker.service || true
+
+      - name: make deploy (1-й запуск, с нуля)
+        run: make deploy
+
+      - name: make verify
+        run: set -o pipefail; make verify 2>&1 | tee verify-1.log
+
+      - name: make deploy (2-й запуск, проверка идемпотентности)
+        run: make deploy
+
+      - name: make verify (после повторного развертывания)
+        run: set -o pipefail; make verify 2>&1 | tee verify-2.log
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo '## Результат smoke-тестов (после повторного deploy)'
+            echo '```'
+            sed -r 's/\x1B\[[0-9;]*m//g' verify-2.log 2>/dev/null || sed -r 's/\x1B\[[0-9;]*m//g' verify-1.log 2>/dev/null || echo "verify не запускался"
+            echo '```'
+            echo '## Кластер'
+            echo '```'
+            kubectl version 2>/dev/null | head -2
+            kubectl get nodes -o wide 2>/dev/null
+            kubectl get gatewayclass,gateway,httproute -A 2>/dev/null
+            kubectl get pods -A 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          set +e
+          kubectl get pods -A -o wide
+          kubectl get events -A --sort-by=.lastTimestamp | tail -80
+          kubectl describe gateway -A
+          kubectl get httproute -A -o yaml | grep -A30 'status:'
+          for ns in demo logging envoy-gateway-system monitoring; do
+            for p in $(kubectl -n $ns get pods -o name); do
+              echo "=== $ns/$p"; kubectl -n $ns describe $p | tail -25; kubectl -n $ns logs $p --all-containers --tail=60
+            done
+          done
+          sudo journalctl -u kubelet --no-pager | tail -100
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-logs
+          path: verify-*.log
+          if-no-files-found: ignore

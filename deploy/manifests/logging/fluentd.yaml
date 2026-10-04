@@ -49,7 +49,6 @@ spec:
         app.kubernetes.io/name: fluentd
     spec:
       serviceAccountName: fluentd
-      priorityClassName: system-node-critical
       terminationGracePeriodSeconds: 30
       tolerations:
         - operator: Exists

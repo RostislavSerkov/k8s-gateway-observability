@@ -45,7 +45,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: opensearch
-          image: opensearchproject/opensearch:3.9.0
+          image: opensearchproject/opensearch:3.8.0
           imagePullPolicy: IfNotPresent
           env:
             - name: discovery.type

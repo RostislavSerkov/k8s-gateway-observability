@@ -80,10 +80,11 @@ jobs:
       - name: Job summary
         if: always()
         run: |
+          set +e
           {
-            echo '## Результат smoke-тестов (после повторного deploy)'
+            echo '## Результат smoke-тестов (последний выполненный make verify)'
             echo '```'
-            sed -r 's/\x1B\[[0-9;]*m//g' verify-2.log 2>/dev/null || sed -r 's/\x1B\[[0-9;]*m//g' verify-1.log 2>/dev/null || echo "verify не запускался"
+            if [ -f verify-2.log ]; then sed -r 's/\x1B\[[0-9;]*m//g' verify-2.log; elif [ -f verify-1.log ]; then sed -r 's/\x1B\[[0-9;]*m//g' verify-1.log; else echo 'verify не запускался'; fi
             echo '```'
             echo '## Кластер'
             echo '```'

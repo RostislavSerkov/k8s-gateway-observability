@@ -114,7 +114,7 @@ cd k8s-gateway-observability
 make deploy
 ```
 
-На чистой VM занимает примерно 15-20 минут. `make deploy` запускает `sudo ./scripts/deploy.sh`, который по очереди выполняет:
+На чистой VM занимает примерно 15-20 минут. `make deploy` запускает `sudo bash scripts/deploy.sh`, который по очереди выполняет:
 
 1. `scripts/00-host-prepare.sh` - подготовка хоста: отключает swap, включает модули `overlay` и `br_netfilter`,
    sysctl, ставит containerd (`SystemdCgroup = true`), kubeadm/kubelet/kubectl нужной версии (apt hold) и Helm

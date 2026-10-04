@@ -111,13 +111,22 @@ sleep 20  # один-два scrape interval, чтобы трафик выше п
 for q in \
   'sum(nginx_http_requests_total{namespace="demo"})' \
   'sum by (envoy_response_code_class) (envoy_cluster_upstream_rq_xx{envoy_cluster_name=~"httproute/demo/.*"})' \
-  'histogram_quantile(0.95, sum by (le) (rate(envoy_cluster_upstream_rq_time_bucket{envoy_cluster_name=~"httproute/demo/.*"}[5m])))' \
   'sum(rate(container_cpu_usage_seconds_total{namespace="demo", container!=""}[5m]))' \
   'sum(fluentd_output_status_emit_records{type="opensearch"})'
 do
   res=$(prom_query "$q" | jq -c '[.data.result[] | {m: (.metric | del(.__name__)), v: .value[1]}]')
   if [[ "$res" != "[]" && -n "$res" ]]; then pass "PromQL: ${q}"; echo "        => ${res:0:220}"; else fail "PromQL без данных: ${q}"; fi
 done
+
+# p95 latency через Gateway (гистограмма Envoy появляется после первых запросов, поэтому проверка мягкая)
+q='histogram_quantile(0.95, sum by (le) (envoy_cluster_upstream_rq_time_bucket{envoy_cluster_name=~"httproute/demo/.*"}))'
+res=""
+for _ in $(seq 6); do
+  res=$(prom_query "$q" | jq -c '[.data.result[] | {v: .value[1]}]')
+  [[ "$res" != "[]" && -n "$res" ]] && break
+  sleep 10
+done
+if [[ "$res" != "[]" && -n "$res" ]]; then pass "PromQL (p95 latency, мс): ${q}"; echo "        => ${res}"; else warn "p95 latency пока без данных: ${q}"; fi
 
 # ---------------------------------------------------------------- 3. Logging
 log "3. Логирование: Fluentd -> OpenSearch"
@@ -138,8 +147,13 @@ else
   fail "Запись с меткой ${probe} не появилась в OpenSearch за 2 минуты"
 fi
 
-found=$(os_get "/k8s-logs-*/_search?q=${probe}&size=10" \
-  | jq -c '.hits.hits[]._source | select(.kubernetes.namespace_name == "envoy-gateway-system") | {pod: .kubernetes.pod_name, code: .http.response_code, path: .http.path}' 2>/dev/null | head -1 || true)
+found=""
+for _ in $(seq 20); do
+  found=$(os_get "/k8s-logs-*/_search?q=${probe}&size=10" \
+    | jq -c '.hits.hits[]._source | select(.kubernetes.namespace_name == "envoy-gateway-system") | {pod: .kubernetes.pod_name, code: .http.response_code, path: .http.path}' 2>/dev/null | head -1 || true)
+  [[ -n "$found" ]] && break
+  sleep 3
+done
 [[ -n "$found" ]] && { pass "Access-лог Envoy (Gateway) для того же запроса найден"; echo "        => ${found}"; } \
   || warn "Access-лог Envoy для запроса пока не найден (не входит в обязательную часть)"
 

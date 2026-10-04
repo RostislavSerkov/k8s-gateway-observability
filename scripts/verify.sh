@@ -75,6 +75,15 @@ log "2. Мониторинг: Prometheus"
 prom_query() {
   svc_get monitoring kps-prometheus:9090 "/api/v1/query?query=$(urlencode "$1")"
 }
+# Запрос к OpenSearch: через прокси API-сервера, если не вышло - curl изнутри пода opensearch-0
+os_get() {
+  local out
+  out=$(svc_get logging opensearch:9200 "$1" 2>/dev/null)
+  if [[ -z "$out" ]]; then
+    out=$(kubectl -n logging exec opensearch-0 -c opensearch -- curl -s "http://localhost:9200$1" 2>/dev/null)
+  fi
+  printf '%s' "$out"
+}
 prom_value() {
   prom_query "$1" | jq -r '.data.result[0].value[1] // empty'
 }
@@ -117,7 +126,7 @@ curl -s -o /dev/null --max-time 5 "${GW}/?probe=${probe}"
 echo "        Отправлен запрос: GET ${GW}/?probe=${probe}"
 found=""
 for _ in $(seq 40); do
-  found=$(svc_get logging opensearch:9200 "/k8s-logs-*/_search?q=${probe}&size=5" 2>/dev/null \
+  found=$(os_get "/k8s-logs-*/_search?q=${probe}&size=5" \
     | jq -c '.hits.hits[]._source | select(.kubernetes.namespace_name == "demo") | {time: .["@timestamp"], ns: .kubernetes.namespace_name, pod: .kubernetes.pod_name, log_type, status: .http.status, uri: .http.uri}' 2>/dev/null | head -1 || true)
   [[ -n "$found" ]] && break
   sleep 3
@@ -129,12 +138,12 @@ else
   fail "Запись с меткой ${probe} не появилась в OpenSearch за 2 минуты"
 fi
 
-found=$(svc_get logging opensearch:9200 "/k8s-logs-*/_search?q=${probe}&size=10" 2>/dev/null \
+found=$(os_get "/k8s-logs-*/_search?q=${probe}&size=10" \
   | jq -c '.hits.hits[]._source | select(.kubernetes.namespace_name == "envoy-gateway-system") | {pod: .kubernetes.pod_name, code: .http.response_code, path: .http.path}' 2>/dev/null | head -1 || true)
 [[ -n "$found" ]] && { pass "Access-лог Envoy (Gateway) для того же запроса найден"; echo "        => ${found}"; } \
   || warn "Access-лог Envoy для запроса пока не найден (не входит в обязательную часть)"
 
-cnt=$(svc_get logging opensearch:9200 "/k8s-logs-*/_count?q=log_type:access" 2>/dev/null | jq -r '.count // 0')
+cnt=$(os_get "/k8s-logs-*/_count?q=log_type:access" | jq -r '.count // 0')
 (( cnt > 0 )) && pass "Всего access-записей в OpenSearch: ${cnt}" || fail "В OpenSearch нет access-записей"
 
 # ---------------------------------------------------------------- Итог

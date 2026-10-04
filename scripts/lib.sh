@@ -71,7 +71,7 @@ node_ip() {
 # GET к сервису внутри кластера через API-server proxy (не нужен port-forward)
 svc_get() {
   local ns=$1 svc=$2 path=$3
-  kubectl get --raw "/api/v1/namespaces/${ns}/services/${svc}/proxy${path}"
+  kubectl get --request-timeout=20s --raw "/api/v1/namespaces/${ns}/services/${svc}/proxy${path}"
 }
 
 urlencode() {

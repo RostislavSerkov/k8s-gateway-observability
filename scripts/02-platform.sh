@@ -13,7 +13,7 @@ log "Namespaces"
 kubectl apply -f "${MANIFESTS}/namespaces.yaml"
 
 # ---------- Секреты ----------
-rand_pw() { openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20; }
+rand_pw() { openssl rand -hex 12; }
 secret_exists() { kubectl -n "$1" get secret "$2" >/dev/null 2>&1; }
 
 log "Секреты (генерируются один раз и переиспользуются)"

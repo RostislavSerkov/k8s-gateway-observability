@@ -250,8 +250,8 @@ kubectl get --raw '/api/v1/namespaces/monitoring/services/kps-prometheus:9090/pr
 `make verify` отправляет запрос с уникальной меткой вида `?probe=probe1759...` и ждет, пока такая запись
 появится в OpenSearch.
 
-Что собирается: логи контейнеров из namespace `demo` (access-лог nginx из stdout и error-лог из stderr) и
-access-логи Envoy. Каждой записи проставляется `log_type`: `access` или `error`, поля из JSON лежат в `http.*`
+Что собирается: логи контейнера `nginx` из namespace `demo` (access-лог из stdout и error-лог из stderr) и
+логи контейнера `envoy` (access-логи Gateway). Время записи берется из CRI-лога containerd. Каждой записи проставляется `log_type`: `access` или `error`, поля из JSON лежат в `http.*`
 (`http.status`, `http.uri`, `http.request_time` и т.д.), метаданные в `kubernetes.*`.
 Куда: OpenSearch, индексы `k8s-logs-YYYY.MM.DD`. Конфиг Fluentd: [`fluent.conf`](deploy/manifests/logging/fluent.conf).
 
@@ -337,4 +337,5 @@ deploy/
 - Метрики etcd отдаются по HTTP на `:2381`, controller-manager и scheduler слушают `0.0.0.0` (с аутентификацией).
   Если VM смотрит в интернет, эти порты стоит закрыть файрволом.
 - Fluentd запущен от root (только чтение `/var/log`), потому что файлы логов контейнеров принадлежат root.
+- Собственные логи Envoy (не access-логи) попадают в OpenSearch с `log_type: error`, так как Envoy пишет их в stderr.
 - Для развертывания нужен интернет: образы и пакеты скачиваются из публичных репозиториев.

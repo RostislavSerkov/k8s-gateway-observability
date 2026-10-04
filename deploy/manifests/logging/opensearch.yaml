@@ -1,0 +1,103 @@
+# OpenSearch (single-node) - хранилище и поиск логов. Apache-2.0, без коммерческих лицензий.
+# Security-плагин отключен: доступ только внутри кластера (NetworkPolicy),
+# UI опубликован через Gateway за Basic Auth. См. README "Ограничения".
+apiVersion: v1
+kind: Service
+metadata:
+  name: opensearch
+  namespace: logging
+  labels:
+    app.kubernetes.io/name: opensearch
+spec:
+  selector:
+    app.kubernetes.io/name: opensearch
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opensearch
+  namespace: logging
+  labels:
+    app.kubernetes.io/name: opensearch
+spec:
+  serviceName: opensearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opensearch
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: opensearch
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: opensearch
+          image: opensearchproject/opensearch:3.9.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: node.name
+              value: opensearch-0
+            - name: bootstrap.memory_lock
+              value: "false"
+            # Не требует vm.max_map_count на хосте (на случай, если sysctl не применен)
+            - name: node.store.allow_mmap
+              value: "false"
+            - name: OPENSEARCH_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+            - name: DISABLE_SECURITY_PLUGIN
+              value: "true"
+            - name: DISABLE_INSTALL_DEMO_CONFIG
+              value: "true"
+            - name: DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 9200
+          startupProbe:
+            httpGet:
+              path: /_cluster/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health?local=true
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              memory: 1536Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/opensearch/data
+      volumes:
+        # emptyDir: в kubeadm нет StorageClass по умолчанию. Для продакшена - PVC (см. README).
+        - name: data
+          emptyDir:
+            sizeLimit: 5Gi

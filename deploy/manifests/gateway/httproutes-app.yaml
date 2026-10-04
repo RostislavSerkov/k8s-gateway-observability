@@ -1,0 +1,101 @@
+# Маршруты демо-приложения.
+#
+# 1) hello (любой hostname, HTTP и HTTPS):
+#      /                        -> hello-v1      (основной ответ "Hello World!")
+#      /v2/*                    -> hello-v2      (маршрутизация по path + URLRewrite префикса)
+#      заголовок x-canary: true -> hello-v2      (маршрутизация по header)
+# 2) hello-canary (hostname canary.demo.local):
+#      weighted traffic splitting 80% v1 / 20% v2
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hello
+  namespace: demo
+spec:
+  parentRefs:
+    - name: public-gw
+      namespace: gateway-infra
+      sectionName: http
+    - name: public-gw
+      namespace: gateway-infra
+      sectionName: https
+  rules:
+    - name: canary-by-header
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+          headers:
+            - name: x-canary
+              value: "true"
+      filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            add:
+              - name: X-Route
+                value: canary-by-header
+      backendRefs:
+        - name: hello-v2
+          port: 80
+    - name: v2-by-path
+      matches:
+        - path:
+            type: PathPrefix
+            value: /v2
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            add:
+              - name: X-Route
+                value: v2-by-path
+      backendRefs:
+        - name: hello-v2
+          port: 80
+    - name: default
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            add:
+              - name: X-Route
+                value: default
+      timeouts:
+        request: 10s
+      backendRefs:
+        - name: hello-v1
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hello-canary
+  namespace: demo
+spec:
+  parentRefs:
+    - name: public-gw
+      namespace: gateway-infra
+  hostnames:
+    - canary.demo.local
+  rules:
+    - name: weighted-split
+      filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            add:
+              - name: X-Route
+                value: weighted-split
+      backendRefs:
+        - name: hello-v1
+          port: 80
+          weight: 80
+        - name: hello-v2
+          port: 80
+          weight: 20

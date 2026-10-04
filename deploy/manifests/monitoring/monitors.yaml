@@ -1,0 +1,50 @@
+# Дополнительные цели Prometheus (поверх того, что собирает kube-prometheus-stack по умолчанию:
+# apiserver, kubelet/cAdvisor, etcd, scheduler, controller-manager, kube-proxy, CoreDNS,
+# node-exporter, kube-state-metrics).
+
+# Envoy data plane: HTTP-метрики шлюза (RPS, коды ответов, latency по маршрутам/backend)
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: envoy-proxy
+  namespace: envoy-gateway-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: envoy
+      app.kubernetes.io/component: proxy
+      app.kubernetes.io/managed-by: envoy-gateway
+  podMetricsEndpoints:
+    - port: metrics
+      path: /stats/prometheus
+      interval: 15s
+---
+# Envoy Gateway control plane (xDS, статусы ресурсов Gateway API)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: envoy-gateway
+  namespace: envoy-gateway-system
+spec:
+  selector:
+    matchLabels:
+      control-plane: envoy-gateway
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+---
+# Fluentd: скорость приема/отправки записей, ошибки и retry выгрузки в OpenSearch
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: fluentd
+  namespace: logging
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluentd
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

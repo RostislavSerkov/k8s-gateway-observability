@@ -1,0 +1,91 @@
+# Политики Envoy Gateway (расширения поверх Gateway API).
+#
+# 1) SecurityPolicy: Basic Auth для UI без собственной аутентификации (Prometheus, OpenSearch Dashboards).
+#    Secret gateway-basic-auth (.htpasswd, SHA) генерирует scripts/02-platform.sh, в Git его нет.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: prometheus-basic-auth
+  namespace: monitoring
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: prometheus
+  basicAuth:
+    users:
+      name: gateway-basic-auth
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: logs-basic-auth
+  namespace: logging
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: opensearch-dashboards
+  basicAuth:
+    users:
+      name: gateway-basic-auth
+---
+# 2) BackendTrafficPolicy для приложения: retry при сбоях соединения/503,
+#    circuit breaker и локальный rate limit (защита backend от перегрузки).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: hello-resilience
+  namespace: demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: hello
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: hello-canary
+  retry:
+    numRetries: 2
+    retryOn:
+      triggers:
+        - connect-failure
+        - refused-stream
+        - reset
+      httpStatusCodes:
+        - 503
+    perRetry:
+      timeout: 2s
+      backOff:
+        baseInterval: 100ms
+        maxInterval: 1s
+  circuitBreaker:
+    maxConnections: 1024
+    maxPendingRequests: 1024
+    maxParallelRequests: 1024
+  rateLimit:
+    type: Local
+    local:
+      rules:
+        - limit:
+            requests: 1000
+            unit: Second
+---
+# 3) ClientTrafficPolicy: таймауты клиентских соединений и корректный X-Forwarded-For
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: public-gw-clients
+  namespace: gateway-infra
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: public-gw
+  timeout:
+    http:
+      requestReceivedTimeout: 30s
+      idleTimeout: 120s
+  clientIPDetection:
+    xForwardedFor:
+      numTrustedHops: 0

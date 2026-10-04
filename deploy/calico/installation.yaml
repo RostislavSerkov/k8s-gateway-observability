@@ -1,0 +1,18 @@
+# Calico, установленный через tigera-operator. __POD_CIDR__ подставляет scripts/01-cluster.sh
+# (совпадает с networking.podSubnet в kubeadm-config).
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+      - name: default-ipv4-ippool
+        blockSize: 26
+        cidr: __POD_CIDR__
+        encapsulation: VXLANCrossSubnet
+        natOutgoing: Enabled
+        nodeSelector: all()
+    # Берем IP ноды из Kubernetes, а не "первый попавшийся" интерфейс (docker0, cni и т.п.)
+    nodeAddressAutodetectionV4:
+      kubernetes: NodeInternalIP

@@ -1,0 +1,43 @@
+# Zero-trust для namespace demo (применяется Calico):
+#  - по умолчанию весь входящий трафик запрещен;
+#  - HTTP (8080) разрешен только от Envoy (namespace envoy-gateway-system);
+#  - метрики (9113) разрешены только Prometheus (namespace monitoring).
+# Трафик от самой ноды (kubelet probes) разрешен всегда по семантике NetworkPolicy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hello-allow-gateway-and-prometheus
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: hello
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: envoy
+      ports:
+        - port: 8080
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9113
+          protocol: TCP

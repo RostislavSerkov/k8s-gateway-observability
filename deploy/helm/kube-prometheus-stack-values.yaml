@@ -1,0 +1,116 @@
+# kube-prometheus-stack (prometheus-community), версия задана в versions.env.
+# Короткие имена ресурсов: kps-prometheus, kps-alertmanager, kps-grafana, kps-operator.
+fullnameOverride: kps
+
+crds:
+  enabled: true
+
+# ---------------- Prometheus ----------------
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 2d
+    retentionSize: 4GB
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    # Подхватывать ServiceMonitor/PodMonitor/PrometheusRule из ВСЕХ namespace,
+    # а не только с лейблом release=kps
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    podMonitorNamespaceSelector: {}
+    ruleNamespaceSelector: {}
+    # Хранилище: emptyDir (в чистом kubeadm нет StorageClass по умолчанию), см. README "Ограничения"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+    externalUrl: http://prometheus.demo.local:30080
+
+# ---------------- Alertmanager ----------------
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+# ---------------- Grafana ----------------
+grafana:
+  enabled: true
+  # Пароль администратора генерирует scripts/02-platform.sh (Secret monitoring/grafana-admin)
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  grafana.ini:
+    server:
+      root_url: http://grafana.demo.local:30080
+    analytics:
+      check_for_updates: false
+      reporting_enabled: false
+    users:
+      allow_sign_up: false
+  defaultDashboardsTimezone: browser
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      # Дашборды из ConfigMap в любом namespace
+      searchNamespace: ALL
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+# ---------------- Компоненты control-plane kubeadm ----------------
+# В kubeadm-config bind-address controller-manager/scheduler = 0.0.0.0, метрики etcd на :2381
+kubeControllerManager:
+  enabled: true
+kubeScheduler:
+  enabled: true
+kubeEtcd:
+  enabled: true
+  service:
+    enabled: true
+    port: 2381
+    targetPort: 2381
+  serviceMonitor:
+    scheme: http
+kubeProxy:
+  enabled: true
+
+# ---------------- Экспортеры ----------------
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

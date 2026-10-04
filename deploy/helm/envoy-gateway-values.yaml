@@ -1,0 +1,18 @@
+# Envoy Gateway (oci://docker.io/envoyproxy/gateway-helm), версия задана в versions.env.
+# Чарт также устанавливает CRD Gateway API (standard + experimental) и CRD Envoy Gateway.
+# Namespace envoy-gateway-system создается из deploy/manifests/namespaces.yaml.
+createNamespace: false
+
+deployment:
+  replicas: 1
+  envoyGateway:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+
+# Контроллер не должен вытесняться при обслуживании ноды без замены
+podDisruptionBudget:
+  minAvailable: 0

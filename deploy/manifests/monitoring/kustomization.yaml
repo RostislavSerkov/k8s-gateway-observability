@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - monitors.yaml
+  - prometheusrule.yaml
+
+# Дашборд Grafana подхватывается sidecar-ом kube-prometheus-stack по лейблу grafana_dashboard=1
+configMapGenerator:
+  - name: grafana-dashboard-hello-gateway
+    namespace: monitoring
+    files:
+      - dashboards/hello-gateway.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"

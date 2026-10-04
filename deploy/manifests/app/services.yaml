@@ -1,0 +1,51 @@
+# Отдельный Service на каждую версию: HTTPRoute распределяет трафик между ними (canary / traffic split).
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-v1
+  labels:
+    app.kubernetes.io/name: hello
+    app.kubernetes.io/version: v1
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: hello
+    app.kubernetes.io/version: v1
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: metrics
+      port: 9113
+      targetPort: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-v2
+  labels:
+    app.kubernetes.io/name: hello
+    app.kubernetes.io/version: v2
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: hello
+    app.kubernetes.io/version: v2
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: metrics
+      port: 9113
+      targetPort: metrics
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hello-v1
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hello
+      app.kubernetes.io/version: v1

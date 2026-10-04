@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: demo
+
+resources:
+  - deployments.yaml
+  - services.yaml
+  - networkpolicy.yaml
+  - servicemonitor.yaml
+
+# Хэш-суффикс в имени ConfigMap => при изменении конфига Deployment автоматически перекатывается
+configMapGenerator:
+  - name: hello-nginx-conf
+    files:
+      - nginx.conf
+  - name: hello-version-v1
+    files:
+      - version.conf=version-v1.conf
+  - name: hello-version-v2
+    files:
+      - version.conf=version-v2.conf

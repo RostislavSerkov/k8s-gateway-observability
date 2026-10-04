@@ -1,0 +1,46 @@
+# Namespaces решения.
+# gateway-access: "true" - namespace может публиковать HTTPRoute на общий Gateway
+# (см. allowedRoutes в gateway/gateway.yaml).
+# pod-security.kubernetes.io/* - Pod Security Admission (встроен в Kubernetes).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    gateway-access: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-infra
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: envoy-gateway-system
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    gateway-access: "true"
+    # node-exporter использует hostNetwork/hostPID/hostPath
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging
+  labels:
+    gateway-access: "true"
+    # Fluentd DaemonSet читает /var/log ноды через hostPath
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: baseline
